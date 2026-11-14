@@ -1,0 +1,6 @@
+.github/
+test/
+src/
+package.json
+package-lock.json
+eslint.config.mjs
