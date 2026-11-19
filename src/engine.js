@@ -29,16 +29,22 @@ export class NexusEngine {
     this.selected = null;
     this.read = options.read || (() => ({ lit: false, brightness: 0, devices: {} }));
     this.mats = createMats();
+    this.mobile =
+      options.mobile != null
+        ? !!options.mobile
+        : /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(String(navigator.userAgent || ""));
     this.onPick = options.onPick || (() => {});
 
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: true,
+      // 手机 WebView 上 MSAA + high-performance 容易把渲染进程顶崩，直接关掉
+      antialias: !this.mobile,
       alpha: false,
-      powerPreference: "high-performance",
+      powerPreference: this.mobile ? "default" : "high-performance",
       preserveDrawingBuffer: false,
+      failIfMajorPerformanceCaveat: false,
     });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.mobile ? 1.5 : 2));
     this.renderer.setClearColor(0x04060a, 1);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.96;
@@ -66,7 +72,7 @@ export class NexusEngine {
     this.floorGroups = [];
     this.roomNodes = [];
     this.labels = [];
-    this._lightBudget = 14;
+    this._lightBudget = this.mobile ? 3 : 8;
 
     this._onLost = (event) => {
       event.preventDefault();
@@ -150,7 +156,7 @@ export class NexusEngine {
   setData(floors, read) {
     if (read) this.read = read;
     this._clearWorld();
-    this._lightBudget = 14;
+    this._lightBudget = this.mobile ? 3 : 8;
     const ordered = sortFloors(floors || []);
     ordered.forEach((floor, index) => this._buildFloor(floor, index));
     this._frameCamera();
@@ -303,7 +309,7 @@ export class NexusEngine {
     }
 
     let lamp = null;
-    if (this._lightBudget > 0) {
+    if (lit && this._lightBudget > 0) {
       this._lightBudget -= 1;
       lamp = new THREE.PointLight(this.accent.getHex(), 0.3, Math.max(w, d) * 1.8, 2);
       lamp.position.set(px, h - 0.26, pz);
@@ -538,11 +544,21 @@ export class NexusEngine {
 
   /* ---------------- 渲染 ---------------- */
 
+  /** 单帧像素封顶：超过 ~220 万像素就降采样，避免 framebuffer 撑爆移动 GPU */
+  _applyPixelRatio(w, h) {
+    const cap = this.mobile ? 1.5 : 2;
+    let ratio = Math.min(window.devicePixelRatio || 1, cap);
+    const budget = this.mobile ? 1.2e6 : 2.2e6;
+    if (w * h * ratio * ratio > budget) ratio = Math.max(0.75, Math.sqrt(budget / (w * h)));
+    if (Math.abs(ratio - this.renderer.getPixelRatio()) > 0.01) this.renderer.setPixelRatio(ratio);
+  }
+
   resize() {
     const host = this.canvas.parentElement || this.canvas;
     const w = host.clientWidth;
     const h = host.clientHeight;
     if (!w || !h) return;
+    this._applyPixelRatio(w, h);
     this.renderer.setSize(w, h, false);
     const aspect = this.camera.aspect;
     this.camera.aspect = w / h;
@@ -588,7 +604,8 @@ export class NexusEngine {
       this._last = time;
       this._acc += delta;
       const idle = !this._dragging && !this.autoRotate;
-      if (this._acc < (idle ? IDLE_MS : ACTIVE_MS)) return;
+      const idleMs = this.mobile ? IDLE_MS * 1.6 : IDLE_MS;
+      if (this._acc < (idle ? idleMs : ACTIVE_MS)) return;
       this._acc = 0;
       if (this.autoRotate && !this._dragging) this.world.rotation.y += this.speed;
       this.roomNodes.forEach((node) => {

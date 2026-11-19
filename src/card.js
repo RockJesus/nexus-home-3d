@@ -371,8 +371,10 @@ class NexusHome3DCard extends HTMLElement {
       this._engine = new NexusEngine(this._nodes.canvas, this._nodes.overlay, {
         accent: cfg.theme.accent,
         alert: cfg.theme.alert,
+        mobile: /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(String(navigator.userAgent || "")),
         read: (room) => this._roomState(room),
         onPick: (roomId, slot, action) => this._pickFromScene(roomId, slot, action),
+        onContextLost: () => this._onEngineLost(),
       });
       this._engine.setSpeed(cfg.camera.speed);
       this._engine.setAutoRotate(cfg.camera.auto_rotate);
@@ -386,6 +388,15 @@ class NexusHome3DCard extends HTMLElement {
   }
 
   /** 房间整体读数：灯光决定发光，其余槽位驱动室内模型 */
+  /** WebGL 上下文丢失（移动端显存不足最常见）：停止 3D，保留完整实体控制 */
+  _onEngineLost() {
+    if (!this._nodes) return;
+    this._nodes.fallback.classList.add("show");
+    this._nodes.fallback.innerHTML =
+      "<b>3D 渲染已停止</b>WebGL 上下文丢失，多为移动端显存不足<br>已切到列表模式，实体仍可正常控制";
+    if (this._nodes.canvas) this._nodes.canvas.style.visibility = "hidden";
+  }
+
   _roomState(room) {
     const out = { lit: false, brightness: 0, devices: {} };
     if (!room || !room.entities) return out;

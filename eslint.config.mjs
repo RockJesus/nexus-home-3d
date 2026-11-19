@@ -17,6 +17,7 @@ export default [
         IntersectionObserver: "readonly",
         setTimeout: "readonly",
         devicePixelRatio: "readonly",
+        navigator: "readonly",
       },
     },
     rules: {

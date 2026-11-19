@@ -1,6 +1,6 @@
 {
   "name": "nexus-home-3d",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Cyberpunk 3D home dashboard card for Home Assistant",
   "type": "module",
   "private": true,
