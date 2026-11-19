@@ -5,7 +5,7 @@
 
 export const CARD_TAG = "nexus-home-3d";
 export const EDITOR_TAG = "nexus-home-3d-editor";
-export const VERSION = "v1.0.1";
+export const VERSION = "v1.0.2";
 
 /** 房间底面尺寸档位，单位近似米 */
 export const SIZES = { s: [1.6, 1.4], m: [2.2, 1.9], l: [3.0, 2.4], xl: [3.4, 2.6] };

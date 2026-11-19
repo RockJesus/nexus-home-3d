@@ -28,6 +28,15 @@ const ICONS = {
     '<svg viewBox="0 0 256 256"><path d="M128 96a32 32 0 0 0-32 32 48 48 0 0 1-48 48 8 8 0 0 0 0 16 64 64 0 0 0 64-64 16 16 0 0 1 32 0 96 96 0 0 0 96 96 8 8 0 0 0 0-16 80 80 0 0 1-80-80 32 32 0 0 0-32-32Z"/></svg>',
 };
 
+const PREVIEW_CSS = `
+.preview{display:grid;grid-template-rows:auto 1fr;gap:10px;height:100%;padding:14px;box-sizing:border-box;
+  background:#05070b;border-radius:12px;contain:strict;overflow:hidden}
+.preview .pvhead{font:600 11px/1.4 ui-monospace,monospace;letter-spacing:.2em;text-transform:uppercase;
+  color:#00e7ff;opacity:.9}
+.preview .pvbody{display:grid;place-items:center;min-height:0}
+.preview svg{width:88%;max-height:100%;height:auto}
+`;
+
 const PREVIEW_TAGS = new Set([
   "hui-card-picker",
   "hui-dialog-add-card",
@@ -220,6 +229,10 @@ class NexusHome3DCard extends HTMLElement {
   }
 
   set hass(hass) {
+    if (this._previewOnly || this._isPreview()) {
+      this._hass = hass;
+      return;
+    }
     const hadHass = !!this._hass;
     this._hass = hass;
     if (!this._built) {
@@ -246,10 +259,14 @@ class NexusHome3DCard extends HTMLElement {
 
   connectedCallback() {
     if (this._config && !this._built) this._render();
-    this._observeVisibility();
+    if (!this._previewOnly) this._observeVisibility();
   }
 
   disconnectedCallback() {
+    if (this._previewOnly) {
+      this.shadowRoot.innerHTML = "";
+      this._built = false;
+    }
     if (this._engine) {
       this._engine.destroy();
       this._engine = null;
@@ -264,11 +281,14 @@ class NexusHome3DCard extends HTMLElement {
     const cfg = this._config;
 
     if (this._isPreview()) {
-      this.shadowRoot.innerHTML = `<style>${STYLE}</style>${this._previewMarkup()}`;
+      // 选择器缩略图：只挂 ~600B 的轻量样式，不进 WebGL、不建状态表
+      this.shadowRoot.innerHTML = `<style>${PREVIEW_CSS}</style>${this._previewMarkup()}`;
       this._built = true;
+      this._previewOnly = true;
       return;
     }
 
+    this._previewOnly = false;
     this.shadowRoot.innerHTML = `
       <style>${STYLE}</style>
       <div class="root${cfg.theme.scanlines ? "" : " no-scan"}"
@@ -338,24 +358,20 @@ class NexusHome3DCard extends HTMLElement {
   }
 
   _previewMarkup() {
-    const cfg = this._config;
-    return `<div class="preview" style="--accent:#00E7FF;--alert:#FF2D95;background:#05070b;border-radius:12px">
-      <div class="pvhead">NEXUS · ${esc(cfg.title)}</div>
+    const title = this._config && this._config.title ? this._config.title : "";
+    // 单一 path 拼三层楼块，无文字节点、无滤镜，picker 里几 KB 内存
+    return `<div class="preview">
+      <div class="pvhead">NEXUS · ${esc(title)}</div>
       <div class="pvbody">
-        <svg viewBox="0 0 220 140" aria-hidden="true">
-          <g fill="none" stroke="#00E7FF" stroke-width="1.2" opacity=".85">
-            <path d="M110 22 L188 62 L110 102 L32 62 Z"/>
-            <path d="M32 62 L110 102 L110 132 L32 92 Z" opacity=".45"/>
-            <path d="M188 62 L110 102 L110 132 L188 92 Z" opacity=".45"/>
-            <rect x="86" y="30" width="26" height="26" fill="#0d3a4d" stroke="#00E7FF"/>
-            <rect x="120" y="46" width="20" height="22" fill="#0d3a4d" stroke="#00E7FF"/>
-            <rect x="62" y="46" width="18" height="20" fill="#0d3a4d" stroke="#00E7FF"/>
+        <svg viewBox="0 0 220 150" aria-hidden="true" preserveAspectRatio="xMidYMid meet">
+          <g fill="none" stroke="#00E7FF" stroke-width="1.1" opacity=".9">
+            <path d="M110 18 L186 55 L110 92 L34 55 Z"/>
+            <path d="M46 74 L122 111 L122 132 L46 95 Z" opacity=".55"/>
+            <path d="M34 68 L96 99 L96 118 L34 87 Z" opacity=".4"/>
+            <path d="M122 111 L186 78 L186 99 L122 132 Z" opacity=".4"/>
           </g>
-          <g stroke="#FF2D95" stroke-width="1" opacity=".7">
-            <path d="M86 56 L86 30"/><path d="M112 56 L112 30"/>
-          </g>
-          <g font-family="ui-monospace,monospace" font-size="8" fill="#6b7f93">
-            <text x="12" y="128">CLICK A ROOM TO CONTROL</text>
+          <g stroke="#FF2D95" stroke-width="1" opacity=".75" fill="none">
+            <path d="M86 39 L86 18 L134 18 L134 41"/>
           </g>
         </svg>
       </div>
@@ -440,7 +456,7 @@ class NexusHome3DCard extends HTMLElement {
   /* ---------------- 状态同步 ---------------- */
 
   _syncStates(initial) {
-    if (!this._config) return;
+    if (!this._config || this._previewOnly || this._isPreview()) return;
 
     const changed = new Set();
     this._config.floors.forEach((floor) => {
